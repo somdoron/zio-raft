@@ -130,6 +130,7 @@ object SessionCommand:
   case class ClientRequest[UserCommand, UserResponse](
     sessionId: SessionId,
     requestId: RequestId,
+    lowestSequenceNumber: RequestId,  // Client's lowest unacknowledged sequence number
     command: UserCommand  // Already decoded!
   ) extends SessionCommand[UserCommand, UserResponse]
   

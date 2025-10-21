@@ -554,7 +554,7 @@ SessionMetadata --[SessionExpired]→ ∅
 
 ### Retry Query
 ```
-State --[GetRequestsForRetry(threshold)]→
+State --[GetServerRequestsForRetry(threshold)]→
   1. Filter pending requests where lastSentAt.forall(_ < threshold)
   2. Update lastSentAt = now for filtered requests
   3. Return filtered requests

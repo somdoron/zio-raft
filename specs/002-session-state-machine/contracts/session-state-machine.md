@@ -317,10 +317,8 @@ object SessionStateMachineSpec extends ZIOSpecDefault:
         val requests = ids.map { id =>
           PendingServerRequest(
             id = RequestId(id),
-            sessionId = sessionId,
             payload = ByteVector.empty,
-            createdAt = java.time.Instant.now(),
-            lastSentAt = None
+            lastSentAt = java.time.Instant.now()
           )
         }
         
@@ -374,7 +372,7 @@ object SessionStateMachineSpec extends ZIOSpecDefault:
         .cacheResponse(sessionId, RequestId(1), ByteVector(1, 2, 3), false)
         .copy(
           pendingServerRequests = Map(sessionId -> List(
-            PendingServerRequest(RequestId(1), sessionId, ByteVector.empty, now, None)
+            PendingServerRequest(RequestId(1), ByteVector.empty, now)
           )),
           lastServerRequestId = Map(sessionId -> RequestId(5))
         )

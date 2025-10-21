@@ -365,7 +365,7 @@ The `/plan` command has successfully completed Phases 0-2 (planning phases only)
 **Key Optimizations**:
 - O(1) idempotency checks via Map lookup
 - Dirty reads to skip unnecessary Raft log entries
-- Single command for retry (GetRequestsForRetry) atomically retrieves + updates
+- Single command for retry (GetServerRequestsForRetry) atomically retrieves + updates
 
 **Integration Model**:
 - Library provides state machine logic only (pure functions)

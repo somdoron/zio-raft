@@ -125,6 +125,7 @@ object SessionCommand:
   case class ClientRequest[UserCommand, UserResponse](
     sessionId: SessionId,
     requestId: RequestId,
+    lowestSequenceNumber: RequestId,  // Client's lowest unacknowledged sequence number
     command: UserCommand  // Already deserialized!
   ) extends SessionCommand[UserCommand, UserResponse]
   
@@ -142,7 +143,7 @@ object SessionCommand:
     sessionId: SessionId
   ) extends SessionCommand[Unit, Unit]
   
-  case class GetRequestsForRetry(
+  case class GetServerRequestsForRetry(
     retryIfLastSentBefore: Instant
   ) extends SessionCommand[Unit, List[PendingServerRequest]]
 ```

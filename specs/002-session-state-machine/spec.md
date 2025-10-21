@@ -85,7 +85,7 @@ As a developer building a distributed application on top of Raft with the client
 
 9. **Given** the server receives a ServerRequestAck for request ID N, **When** it is committed through Raft, **Then** the session state machine removes all pending server-initiated requests with ID ≤ N from its pending state (cumulative acknowledgment).
 
-10. **Given** an external retry process needs to resend server-initiated requests, **When** it performs a dirty read of the state machine's unacknowledged list and applies retry policy locally, **Then** if the policy indicates requests need retry, it sends a GetRequestsForRetry command and the state machine atomically identifies requests, updates their lastSentAt, and returns the authoritative list. The process discards the dirty read data and uses only the command response. (Optimization: dirty read allows skipping command when nothing needs retry)
+10. **Given** an external retry process needs to resend server-initiated requests, **When** it performs a dirty read of the state machine's unacknowledged list and applies retry policy locally, **Then** if the policy indicates requests need retry, it sends a GetServerRequestsForRetry command and the state machine atomically identifies requests, updates their lastSentAt, and returns the authoritative list. The process discards the dirty read data and uses only the command response. (Optimization: dirty read allows skipping command when nothing needs retry)
 
 11. **Given** a Raft cluster performs a snapshot, **When** capturing state, **Then** both the user state machine state and the client-server session state (including response cache and pending server-initiated requests) are included in the snapshot.
 
@@ -133,9 +133,9 @@ As a developer building a distributed application on top of Raft with the client
 - **FR-022**: System MUST assign server-initiated request IDs starting at 1 for each new client session, with monotonically increasing IDs per session
 - **FR-023**: Session state MUST track the last assigned server-initiated request ID for each session, even when the unacknowledged request list is empty
 - **FR-024**: System MUST drop all pending server-initiated requests when a client session expires or is closed (expired sessions cannot return)
-- **FR-025**: System MUST provide a "GetRequestsForRetry" command that atomically identifies requests needing resend, updates their lastSentAt timestamps, and returns the request list in the command response
-- **FR-026**: Server-initiated request retry logic MUST be handled outside the state machine by a separate process that periodically sends the GetRequestsForRetry command (avoids separate query + update, keeps full responses out of Raft log)
-- **FR-027**: Retry process SHOULD perform a dirty read of the state machine's unacknowledged request list and apply retry policy locally; only if the policy indicates requests need retrying should it send the GetRequestsForRetry command (optimization: dirty read bypasses Raft consensus for hint only, safe because command response through Raft is authoritative and dirty data is discarded; reduces unnecessary Raft log entries; worst case is one missed retry cycle if dirty read is stale)
+- **FR-025**: System MUST provide a "GetServerRequestsForRetry" command that atomically identifies requests needing resend, updates their lastSentAt timestamps, and returns the request list in the command response
+- **FR-026**: Server-initiated request retry logic MUST be handled outside the state machine by a separate process that periodically sends the GetServerRequestsForRetry command (avoids separate query + update, keeps full responses out of Raft log)
+- **FR-027**: Retry process SHOULD perform a dirty read of the state machine's unacknowledged request list and apply retry policy locally; only if the policy indicates requests need retrying should it send the GetServerRequestsForRetry command (optimization: dirty read bypasses Raft consensus for hint only, safe because command response through Raft is authoritative and dirty data is discarded; reduces unnecessary Raft log entries; worst case is one missed retry cycle if dirty read is stale)
 
 ### Key Entities
 
@@ -190,7 +190,7 @@ As a developer building a distributed application on top of Raft with the client
   1. **User implements external process** that periodically performs a **dirty read** of the state machine's unacknowledged request list (bypasses Raft consensus)
   2. **User's process applies retry policy** locally to the dirty data (checks lastSentAt timestamps)
   3. If dirty read + policy indicates no requests need retry, skip sending command (optimization: avoids unnecessary Raft log entries)
-  4. Otherwise, **user sends "GetRequestsForRetry" command** to state machine (authoritative, through Raft)
+  4. Otherwise, **user sends "GetServerRequestsForRetry" command** to state machine (authoritative, through Raft)
   5. State machine atomically (library logic):
      - Identifies requests needing resend (based on lastSentAt timestamp and retry policy)
      - Updates lastSentAt for those requests to current time
@@ -323,7 +323,7 @@ This specification is based on **Chapter 6 (Client interaction), Section 6.3 (Im
    - Tracks last assigned ID even when unacked list is empty
    - Uses cumulative acknowledgment: ack for ID N removes all ≤ N
    - Drops all pending requests when session expires/closes
-   - Retry handled by external process via "GetRequestsForRetry" command that atomically retrieves + updates lastSentAt (efficient: single log entry, responses stay out of log)
+   - Retry handled by external process via "GetServerRequestsForRetry" command that atomically retrieves + updates lastSentAt (efficient: single log entry, responses stay out of log)
    - Optimization: External process performs dirty read of unacked list + applies policy locally; only sends command if policy indicates retries needed (safe: dirty read is just hint, command response is authoritative; discards dirty data after decision)
 
 5. **Snapshot Architecture**: Single shared dictionary with key prefixes:
@@ -361,7 +361,7 @@ The library user is responsible for:
    - Feed RaftAction.SessionExpired → state machine
 3. ❌ **Response Sending**: Take state machine responses and send via ServerAction.SendResponse
 4. ❌ **Server Request Sending**: Take server-initiated requests and send via ServerAction.SendServerRequest
-5. ❌ **Retry Process**: Implement external process that performs dirty reads and sends GetRequestsForRetry commands
+5. ❌ **Retry Process**: Implement external process that performs dirty reads and sends GetServerRequestsForRetry commands
 6. ❌ **Raft Integration**: Connect state machine to Raft log application
 7. ❌ **Transport**: The client-server library handles all ZeroMQ/network communication
 

@@ -72,7 +72,7 @@ This document consolidates research and architectural decisions for implementing
 
 ### 4. Dirty Read Optimization for Retries
 
-**Decision**: External process performs non-linearizable read before sending GetRequestsForRetry command
+**Decision**: External process performs non-linearizable read before sending GetServerRequestsForRetry command
 
 **Rationale**:
 - Avoids unnecessary Raft log entries when no retries needed
@@ -90,7 +90,7 @@ This document consolidates research and architectural decisions for implementing
 val mayNeedRetry = stateMachine.hasPendingRequests()
 if (mayNeedRetry) {
   // Send authoritative command through Raft
-  sendCommand(GetRequestsForRetry())
+  sendCommand(GetServerRequestsForRetry())
 }
 ```
 
@@ -149,6 +149,7 @@ object SessionCommand:
   case class ClientRequest[UserCommand, UserResponse](
     sessionId: SessionId,
     requestId: RequestId,
+    lowestSequenceNumber: RequestId,  // Client's lowest unacknowledged sequence number
     command: UserCommand  // Already deserialized!
   ) extends SessionCommand[UserCommand, UserResponse]
 

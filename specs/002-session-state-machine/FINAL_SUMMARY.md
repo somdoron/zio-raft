@@ -92,12 +92,12 @@ case class SessionMetadata(
 ```scala
 case class PendingServerRequest[SR](
   id: RequestId,
-  sessionId: SessionId,
   payload: SR,  // Type parameter, not ByteVector!
   lastSentAt: Instant  // NOT Option, initially equals creation time
 )
 ```
 **Removed**: 
+- `sessionId` (redundant - already keyed by session in map)
 - `createdAt` (use `lastSentAt`)
 - `Option` from `lastSentAt`
 - `ByteVector` for payload (use type parameter)
