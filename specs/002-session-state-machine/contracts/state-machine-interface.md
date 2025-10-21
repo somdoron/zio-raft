@@ -133,7 +133,7 @@ object SessionCommand:
     requestId: RequestId
   ) extends SessionCommand[Unit, Unit]
   
-  case class SessionCreationConfirmed(
+  case class CreateSession(
     sessionId: SessionId,
     capabilities: Map[String, String]
   ) extends SessionCommand[Unit, Unit]
@@ -217,7 +217,7 @@ class SessionStateMachine[UserCommand, UserResponse](
           val newState = acknowledgeRequests(state, ack.sessionId, ack.requestId)
           (newState, ())
         
-        case created: SessionCommand.SessionCreationConfirmed =>
+        case created: SessionCommand.CreateSession =>
           // Add session metadata and forward to user SM
           val stateWithSession = state.updated(
             s"session/metadata/${created.sessionId}",

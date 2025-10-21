@@ -6,7 +6,7 @@
 
 ## Overview
 
-This document defines the core data structures for the **session state machine framework**. This is NOT about composing multiple state machines - it's about wrapping ONE user state machine with session management infrastructure.
+This document defines the core data structures for the **session state machine framework** - wrapping ONE user state machine with session management infrastructure.
 
 **Framework Purpose**: Provide session management with idempotency checking and response caching per Raft dissertation Chapter 6.3.
 
@@ -145,7 +145,9 @@ class SessionStateMachine[UserCommand, UserResponse, ServerRequest](
           state.get(cacheKey) match
             case Some(cached) =>
               // Cache hit - return cached response without invoking user SM
-              (state, cached.asInstanceOf[UserResponse])
+              // Also clean cache entries below lowest sequence number
+              val cleanedState = cleanCacheBelowLowestSeq(state, req.sessionId, req.lowestSequenceNumber)
+              (cleanedState, cached.asInstanceOf[UserResponse])
             
             case None =>
               // 2. Apply to user SM (command already decoded!)
@@ -154,8 +156,11 @@ class SessionStateMachine[UserCommand, UserResponse, ServerRequest](
               // 3. Cache response
               val stateWithCache = stateAfterUser.updated(cacheKey, userResponse)
               
-              // 4. Add server-initiated requests to pending
-              val finalState = addServerRequests(stateWithCache, req.sessionId, serverReqs)
+              // 4. Clean cache entries below lowest sequence number
+              val stateWithCleanCache = cleanCacheBelowLowestSeq(stateWithCache, req.sessionId, req.lowestSequenceNumber)
+              
+              // 5. Add server-initiated requests to pending
+              val finalState = addServerRequests(stateWithCleanCache, req.sessionId, serverReqs)
               
               (finalState, userResponse)
         
@@ -164,7 +169,7 @@ class SessionStateMachine[UserCommand, UserResponse, ServerRequest](
           val newState = acknowledgeRequests(state, ack.sessionId, ack.requestId)
           (newState, ())
         
-        case created: SessionCommand.SessionCreationConfirmed =>
+        case created: SessionCommand.CreateSession =>
           // Add session metadata
           val stateWithSession = state.updated(
             s"session/metadata/${created.sessionId}",
@@ -282,7 +287,7 @@ case class SessionMetadata(
 - `capabilities`: Client capabilities (from CreateSession)
 - `createdAt`: When session was created
 
-**Lifecycle**: Created on SessionCreationConfirmed, removed on SessionExpired
+**Lifecycle**: Created on CreateSession, removed on SessionExpired
 
 **Stored At**: Key `session/metadata/{sessionId}` in the Map[String, Any]
 
@@ -326,7 +331,6 @@ state.get(cacheKey) match
 ```scala
 case class PendingServerRequest[SR](
   id: RequestId,          // Monotonically increasing per session
-  sessionId: SessionId,
   payload: SR,            // Server request payload (decoded, not ByteVector!)
   lastSentAt: Instant     // For retry logic (initially set when created, no Option)
 )
@@ -334,7 +338,6 @@ case class PendingServerRequest[SR](
 
 **Fields**:
 - `id`: Unique within session, assigned by session state machine
-- `sessionId`: Target session
 - `payload`: Server request data (type SR from UserStateMachine)
 - `lastSentAt`: Last time sent to client (initially set to creation time, updated on retry)
 
@@ -364,6 +367,7 @@ object SessionCommand:
   case class ClientRequest[UserCommand, UserResponse](
     sessionId: SessionId,
     requestId: RequestId,
+    lowestSequenceNumber: RequestId,  // Client's lowest unacknowledged sequence number
     command: UserCommand  // Already deserialized!
   ) extends SessionCommand[UserCommand, UserResponse]
   
@@ -372,7 +376,7 @@ object SessionCommand:
     requestId: RequestId
   ) extends SessionCommand[Unit, Unit]
   
-  case class SessionCreationConfirmed(
+  case class CreateSession(
     sessionId: SessionId,
     capabilities: Map[String, String]
   ) extends SessionCommand[Unit, Unit]
@@ -381,7 +385,7 @@ object SessionCommand:
     sessionId: SessionId
   ) extends SessionCommand[Unit, Unit]
   
-  case class GetRequestsForRetry(
+  case class GetServerRequestsForRetry(
     retryIfLastSentBefore: Instant
   ) extends SessionCommand[Unit, List[PendingServerRequest]]
 ```
@@ -409,55 +413,45 @@ raftAction match
 
 ## Response Types
 
-### StateMachineResult
+### SessionResponse[R, SR]
 
-**Purpose**: Output from state machine processing
+**Purpose**: Response from session state machine wrapping user response
 
 ```scala
-case class StateMachineResult(
-  response: Option[ClientResponse],           // To send via ServerAction.SendResponse
-  serverRequests: List[ServerInitiatedRequest], // To send via ServerAction.SendServerRequest
-  newState: ByteVector                        // Serialized combined state for snapshot
-)
+sealed trait SessionResponse[R, SR]
+
+object SessionResponse:
+  case class SessionCreatedConfirmed[R, SR](
+    serverRequests: List[SR]
+  ) extends SessionResponse[R, SR]
+  
+  case class SessionExpiredConfirmed[R, SR](
+    serverRequests: List[SR]
+  ) extends SessionResponse[R, SR]
+  
+  case class UserResponse[R, SR](
+    response: R,
+    serverRequests: List[SR]
+  ) extends SessionResponse[R, SR]
 ```
 
-**Fields**:
-- `response`: Response to send back to client (None for acks/admin commands)
-- `serverRequests`: New server-initiated requests to send (empty list if none)
-- `newState`: Updated state (library doesn't maintain state, returns it for user to persist)
+**Note**: All session responses include server requests. The response type is generic to allow wrapping any user response type.
 
 ---
 
-### ClientResponse
-
-**Purpose**: Response to client request
-
-```scala
-case class ClientResponse(
-  sessionId: SessionId,
-  requestId: RequestId,
-  payload: ByteVector,
-  isError: Boolean
-)
-```
-
-**Note**: This type likely exists in client-server-protocol
-
----
-
-### ServerInitiatedRequest
+### ServerInitiatedRequest[SR]
 
 **Purpose**: Request to send from server to client
 
 ```scala
-case class ServerInitiatedRequest(
+case class ServerInitiatedRequest[SR](
   sessionId: SessionId,
   requestId: RequestId,  // Assigned by session state machine
-  payload: ByteVector
+  payload: SR
 )
 ```
 
-**Note**: This type likely exists in client-server-protocol
+**Note**: SR should extend a trait called ServerInitiatedRequest that has session id and request id, or we accept SR as type parameter directly.
 
 ---
 
@@ -531,7 +525,7 @@ val snapshot: SnapshotDictionary = Map(
 
 ### Session Creation
 ```
-∅ --[SessionCreationConfirmed]→ SessionMetadata(new session)
+∅ --[CreateSession]→ SessionMetadata(new session)
 ```
 
 ### Command Processing

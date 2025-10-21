@@ -39,7 +39,7 @@ class SessionStateMachine[UserState, UserCommand, UserResponse](
    * 
    * For ClientRequest: checks idempotency, delegates to user SM if needed, caches response.
    * For ServerRequestAck: removes acknowledged requests (cumulative).
-   * For SessionCreationConfirmed: adds new session metadata.
+   * For CreateSession: adds new session metadata.
    * For SessionExpired: removes all session data.
    * 
    * @param command Session-level command
@@ -233,7 +233,7 @@ forAll { (state: SessionState, sessionId: SessionId) =>
 ### Session Lifecycle
 
 ```
-∅ --SessionCreationConfirmed-->
+∅ --CreateSession-->
   SessionMetadata(sessionId, capabilities, now, now)
 
 Active --SessionExpired-->

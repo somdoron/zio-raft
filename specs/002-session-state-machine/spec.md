@@ -122,7 +122,7 @@ As a developer building a distributed application on top of Raft with the client
 - **FR-015**: System MUST NOT impose size limits on cached responses (for now)
 
 #### State Machine Interface (Library Provides)
-- **FR-016**: System MUST provide a state machine interface that accepts RaftAction events (ClientRequest, ServerRequestAck, SessionCreationConfirmed, SessionExpired) and returns state transitions
+- **FR-016**: System MUST provide a state machine interface that accepts RaftAction events (ClientRequest, ServerRequestAck, CreateSession, SessionExpired) and returns state transitions
 - **FR-017**: System MUST return responses that the user can send via ServerAction.SendResponse through the client-server library (library does NOT send responses directly)
 - **FR-018**: System MUST return server-initiated requests that the user can send via ServerAction.SendServerRequest through the client-server library (library does NOT send requests directly)
 - **FR-019**: System MUST process RaftAction.ClientRequest events by performing idempotency checking, invoking user state machine, caching responses, and returning the response
@@ -357,7 +357,7 @@ The library user is responsible for:
 2. ❌ **Event Routing**: 
    - Feed RaftAction.ClientRequest → state machine
    - Feed RaftAction.ServerRequestAck → state machine
-   - Feed RaftAction.SessionCreationConfirmed → state machine
+   - Feed RaftAction.CreateSession → state machine
    - Feed RaftAction.SessionExpired → state machine
 3. ❌ **Response Sending**: Take state machine responses and send via ServerAction.SendResponse
 4. ❌ **Server Request Sending**: Take server-initiated requests and send via ServerAction.SendServerRequest

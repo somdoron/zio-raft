@@ -136,7 +136,7 @@ object SessionCommand:
   case class ServerRequestAck(sessionId: SessionId, requestId: RequestId)
     extends SessionCommand[Unit, Unit]
   
-  case class SessionCreationConfirmed(sessionId: SessionId, capabilities: Map[String, String])
+  case class CreateSession(sessionId: SessionId, capabilities: Map[String, String])
     extends SessionCommand[Unit, Unit]
   
   case class SessionExpired(sessionId: SessionId)

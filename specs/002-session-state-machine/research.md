@@ -170,7 +170,7 @@ class SessionStateMachine[UserState, UserCommand, UserResponse](
               val newSession = combined.session.cacheResponse(req.sessionId, req.requestId, resp)
               (CombinedState(newSession, newUser), resp)
         
-        case created: SessionCommand.SessionCreationConfirmed =>
+        case created: SessionCommand.CreateSession =>
           // Forward to both
           val newSession = combined.session.addSession(...)
           val newUser = userSM.onSessionCreated(created.sessionId, created.capabilities).run(combined.user)._1
